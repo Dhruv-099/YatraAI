@@ -4,7 +4,8 @@ graph TD
     %% --- Diagram Title & Description ---
     %% This architecture is for a Form-Driven Generative AI Travel Platform.
     %% Key Design: A "Filter-then-Generate" approach. A fast, structured query on PostgreSQL 
-    %% finds candidates, and RAG is then used to create a rich, narrative response.
+    %% finds candidates. RAG is then used to create a rich, narrative response.
+    %% Data Engineering: Leverages offline dumps (Wikipedia) for robust, scalable knowledge base creation.
 
     %% --- 1. LIVE REQUEST/RESPONSE FLOW (User-Facing) ---
 
@@ -48,11 +49,11 @@ graph TD
 
     %% --- 2. OFFLINE DATA PLATFORM FLOW ('Travel Genome' Factory) ---
 
-    subgraph DataSources ["External Data Sources"]
+    subgraph DataSources ["External & Offline Data Sources"]
         style DataSources fill:#f4f4f4,stroke:#666
-        Wikidata["fa:fa-wikipedia-w Wikidata API<br/>(Cities, States, Coordinates)"]
-        OSM["fa:fa-map-marked-alt OpenStreetMap API<br/>(POIs, Airports, Stations)"]
-        Wikipedia["fa:fa-book Wikipedia API<br/>(Textual Descriptions)"]
+        WikipediaDump["fa:fa-archive Wikipedia Dump<br/>(50GB+ XML on S3/GCS)"]
+        WikidataAPI["fa:fa-wikipedia-w Wikidata API<br/>(Cities, States)"]
+        OSM_API["fa:fa-map-marked-alt OpenStreetMap API<br/>(POIs, Airports, Stations)"]
     end
 
     subgraph DataPlatform ["Data Engineering Platform (Offline Pipelines)"]
@@ -66,15 +67,17 @@ graph TD
         subgraph Processing ["Processing & Staging"]
             style Processing fill:#d1ecf1,stroke:#0c5460
             DataLake["fa:fa-archive Data Lake (S3/GCS)<br/>Stores raw and intermediate data (Parquet)"]
-            Spark["fa:fa-cogs Spark Jobs<br/>Fetches, cleans, joins, categorizes, and generates embeddings"]
+            Spark["fa:fa-cogs Spark Jobs<br/>Fetches, cleans, joins, filters dump, and generates embeddings"]
         end
 
         %% Connections for the Offline Data Flow
         Airflow -- "Triggers scheduled jobs" --> Spark
-        Spark -- "1. Fetch Raw Data" --> Wikidata
-        Spark -- "1. Fetch Raw Data" --> OSM
-        Spark -- "1. Fetch Raw Data" --> Wikipedia
-        Spark -- "2. Process & Stage Data" --> DataLake
-        Spark -- "3. Load Final Structured 'Genome' Data" --> PostgresDB
-        Spark -- "4. Load Text Embeddings" --> VectorDB
+        
+        %% Spark's Interactions
+        Spark -- "1a. Fetches & Processes" --> WikidataAPI
+        Spark -- "1b. Fetches & Processes" --> OSM_API
+        Spark -- "2. Reads Entire Dump & Filters" --> WikipediaDump
+        Spark -- "3. Stages Intermediate Data" --> DataLake
+        Spark -- "4. Loads Final Structured 'Genome' Data" --> PostgresDB
+        Spark -- "5. Loads Text Embeddings" --> VectorDB
     end
